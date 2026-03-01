@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skills Globe</title>
+
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: #0e0f12; /* IMPORTANT: dark background */
+    overflow: hidden;
+    font-family: Inter, sans-serif;
+  }
+
+  canvas {
+    display: block;
+  }
+
+  /* Optional subtle grid like your main site */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+</style>
+</head>
+
+<body>
+
+<!-- Three.js canvas will be injected automatically -->
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.155/build/three.module.js';
+
+//////////////////////////////////////////////////////////////
+// SCENE
+//////////////////////////////////////////////////////////////
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15171c);
+
+const camera = new THREE.PerspectiveCamera(
+  60,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+//////////////////////////////////////////////////////////////
+// RESPONSIVE LAYOUT (FINAL STABLE VERSION)
+//////////////////////////////////////////////////////////////
+
+function getLayout() {
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  let radius;
+  let cameraZ;
+
+  // Small phones (iPhone SE etc)
+  if (width <= 420) {
+    radius = width * 0.0032;
+    cameraZ = 8;
+  }
+
+  // Large phones
+  else if (width < 768) {
+    radius = width * 0.0036;
+    cameraZ = 7.8;
+  }
+
+  // Tablets (iPads)
+  else if (width < 1024) {
+    radius = Math.min(width, height) * 0.0028;
+    cameraZ = 7.6;
+  }
+
+  // Desktop
+  else {
+    radius = Math.min(width, height) * 0.0032;
+    cameraZ = 7;
+  }
+
+  radius = Math.min(radius, 2.6);
+
+  return {
+    radius,
+    cameraZ,
+    verticalOffset: 0
+  };
+}
+
+let layout = getLayout();
+let RADIUS = layout.radius;
+camera.position.z = layout.cameraZ;
+
+//////////////////////////////////////////////////////////////
+// GLOBE GROUP
+//////////////////////////////////////////////////////////////
+
+const globeGroup = new THREE.Group();
+scene.add(globeGroup);
+
+let iconSprites = [];
+let buildVersion = 0;
+
+//////////////////////////////////////////////////////////////
+// BUILD GLOBE
+//////////////////////////////////////////////////////////////
+
+function buildGlobe() {
+
+  buildVersion++;
+  const currentVersion = buildVersion;
+
+  while (globeGroup.children.length > 0) {
+    globeGroup.remove(globeGroup.children[0]);
+  }
+
+  iconSprites = [];
+
+  // Wireframe Sphere
+  const geo = new THREE.IcosahedronGeometry(RADIUS, 3);
+  const edges = new THREE.EdgesGeometry(geo);
+
+  const wireframe = new THREE.LineSegments(
+    edges,
+    new THREE.LineBasicMaterial({
+      color: 0xff6a00,
+      transparent: true,
+      opacity: 0.25
+    })
+  );
+
+  globeGroup.add(wireframe);
+
+  // Core
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(RADIUS * 0.95, 64, 64),
+    new THREE.MeshStandardMaterial({
+      color: 0x0f1014,
+      transparent: true,
+      opacity: 0.35,
+      roughness: 1,
+      metalness: 0,
+      depthWrite: false
+    })
+  );
+
+  globeGroup.add(core);
+
+  // Glow
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(RADIUS * 1.05, 64, 64),
+    new THREE.MeshBasicMaterial({
+      color: 0xff6a00,
+      transparent: true,
+      opacity: 0.05,
+      side: THREE.BackSide
+    })
+  );
+
+  globeGroup.add(glow);
+
+  globeGroup.position.y = layout.verticalOffset;
+
+  buildIcons(currentVersion);
+}
+
+//////////////////////////////////////////////////////////////
+// LIGHT
+//////////////////////////////////////////////////////////////
+
+const light = new THREE.PointLight(0xff6a00, 1, 50);
+light.position.set(5, 5, 5);
+scene.add(light);
+
+//////////////////////////////////////////////////////////////
+// ICONS
+//////////////////////////////////////////////////////////////
+
+const baseSkills = [
+  "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/html5/html5-original.svg",
+  "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/css3/css3-original.svg",
+  "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg",
+  "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg",
+  "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg",
+  "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg",
+  "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/flutter/flutter-original.svg",
+  "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/android/android-original.svg",
+  "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg"
+];
+
+const skills = [...baseSkills, ...baseSkills];
+const textureLoader = new THREE.TextureLoader();
+
+function fibonacciSphere(samples, radius) {
+  const points = [];
+  const offset = 2 / samples;
+  const increment = Math.PI * (3 - Math.sqrt(5));
+
+  for (let i = 0; i < samples; i++) {
+    const y = i * offset - 1 + offset / 2;
+    const r = Math.sqrt(1 - y * y);
+    const phi = i * increment;
+
+    const x = Math.cos(phi) * r;
+    const z = Math.sin(phi) * r;
+
+    points.push(new THREE.Vector3(x * radius, y * radius, z * radius));
+  }
+
+  return points;
+}
+
+function buildIcons(version) {
+
+  const iconScale = RADIUS * 0.25;
+  const iconPositions = fibonacciSphere(skills.length, RADIUS * 1.18);
+
+  skills.forEach((url, index) => {
+
+    textureLoader.load(url, (texture) => {
+
+      if (version !== buildVersion) return;
+
+      texture.colorSpace = THREE.SRGBColorSpace;
+
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+        depthTest: true
+      });
+
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(iconScale, iconScale, 1);
+      sprite.position.copy(iconPositions[index]);
+
+      globeGroup.add(sprite);
+      iconSprites.push(sprite);
+    });
+  });
+}
+
+buildGlobe();
+
+//////////////////////////////////////////////////////////////
+// DRAG + INERTIA
+//////////////////////////////////////////////////////////////
+
+let autoRotateSpeed = 0.002;
+let velocity = { x: 0, y: 0 };
+let isDragging = false;
+let prev = { x: 0, y: 0 };
+
+function startDrag(x, y) {
+  isDragging = true;
+  prev = { x, y };
+}
+
+function moveDrag(x, y) {
+  if (!isDragging) return;
+
+  const dx = x - prev.x;
+  const dy = y - prev.y;
+
+  velocity.x = dx * 0.005;
+  velocity.y = dy * 0.005;
+
+  globeGroup.rotation.y += velocity.x;
+  globeGroup.rotation.x += velocity.y;
+
+  prev = { x, y };
+}
+
+function endDrag() {
+  isDragging = false;
+}
+
+document.addEventListener('mousedown', e => startDrag(e.clientX, e.clientY));
+document.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+document.addEventListener('mouseup', endDrag);
+
+document.addEventListener('touchstart', e => {
+  startDrag(e.touches[0].clientX, e.touches[0].clientY);
+});
+
+document.addEventListener('touchmove', e => {
+  moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+});
+
+document.addEventListener('touchend', endDrag);
+
+//////////////////////////////////////////////////////////////
+// ANIMATION
+//////////////////////////////////////////////////////////////
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (!isDragging) {
+    globeGroup.rotation.y += autoRotateSpeed;
+    globeGroup.rotation.y += velocity.x;
+    globeGroup.rotation.x += velocity.y;
+
+    velocity.x *= 0.95;
+    velocity.y *= 0.95;
+  }
+
+  iconSprites.forEach(sprite => {
+
+    const worldPos = sprite.getWorldPosition(new THREE.Vector3());
+    const normal = worldPos.clone().normalize();
+    const cameraDir = camera.position.clone().normalize();
+
+    const dot = normal.dot(cameraDir);
+
+    const t = THREE.MathUtils.clamp((dot + 0.2) / 0.6, 0, 1);
+    const smooth = t * t * (3 - 2 * t);
+
+    sprite.material.opacity = smooth;
+  });
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+//////////////////////////////////////////////////////////////
+// RESIZE
+//////////////////////////////////////////////////////////////
+
+window.addEventListener('resize', () => {
+
+  layout = getLayout();
+  RADIUS = layout.radius;
+
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.position.z = layout.cameraZ;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  buildGlobe();
+});
+</script>
+
+</body>
+</html>
